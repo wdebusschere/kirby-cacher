@@ -1,0 +1,52 @@
+{
+    "name": "akibeo/kirby-cacher",
+    "description": "Cache Manager for Kirby CMS: a Panel view with stats and a safe Clear Cache button for the file cache, the Redis pages cache and named cache namespaces.",
+    "type": "kirby-plugin",
+    "license": "MIT",
+    "keywords": ["kirby", "kirby-plugin", "cache", "redis", "panel"],
+    "homepage": "https://github.com/wdebusschere/kirby-cacher",
+    "authors": [
+        {
+            "name": "Wannes Debusschere",
+            "email": "wannes@e-xperience.pt",
+            "homepage": "https://e-xperience.pt"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/wdebusschere/kirby-cacher/issues",
+        "source": "https://github.com/wdebusschere/kirby-cacher"
+    },
+    "require": {
+        "php": ">=8.2",
+        "getkirby/composer-installer": "^1.2"
+    },
+    "require-dev": {
+        "getkirby/cms": "^5.5",
+        "phpunit/phpunit": "^10.5 || ^11.0"
+    },
+    "suggest": {
+        "ext-redis": "Needed for the Redis pages cache stats and clearing (phpredis 6 or later)"
+    },
+    "autoload": {
+        "psr-4": {
+            "Akibeo\\Cacher\\": "src/"
+        },
+        "files": [
+            "src/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Akibeo\\Cacher\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "allow-plugins": {
+            "getkirby/composer-installer": true
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    }
+}
