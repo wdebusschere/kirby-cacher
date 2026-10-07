@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- The API routes and the Panel view are now admin-only. Before, any logged-in
+  Panel user could clear caches and see the cache path on the server.
+- CI runs with a read-only token and actions pinned to commit SHAs.
+
 ## [1.0.0] - 2026-10-07
 
 First release as a Composer package. Replaces the `kirby-akibeo-cacher` folder
