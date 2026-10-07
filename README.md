@@ -79,7 +79,7 @@ Each namespace is cleared through `kirby()->cache($name)->flush()`. A Redis-back
 
 ### Panel
 
-Open **Cache Manager** in the Panel menu. It shows the number and size of cached files, the number and memory usage of this site's Redis keys, and one card per declared namespace.
+Open **Cache Manager** in the Panel menu (admins only; other roles don't see it). It shows the number and size of cached files, the number and memory usage of this site's Redis keys, and one card per declared namespace.
 
 **Clear Cache** removes everything in Kirby's cache root (except `index.html`, `.gitignore`, `.gitkeep` and `.htaccess`) and, when `cache.pages` uses Redis, this site's Redis pages cache.
 
@@ -100,7 +100,7 @@ Each clear call returns `['success' => bool, 'cleared' => string[], 'errors' => 
 
 ### API
 
-All routes require Panel authentication.
+All routes require a logged-in admin; other roles get a permission error.
 
 | Method | Route | |
 | --- | --- | --- |
