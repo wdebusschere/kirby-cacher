@@ -7,7 +7,8 @@ A Cache Manager for the [Kirby](https://getkirby.com) Panel: stats and a Clear C
 - **Safe with shared Redis** — only this site's keys are deleted, never the whole database. Clearing is refused when the pages cache has no key prefix.
 - **No extra config** — Redis is detected from Kirby's own `cache.pages` option.
 - **Cache namespaces** — declare the caches your plugins use and clear them one by one from the Panel.
-- **Scriptable** — `cacher()->clear()` does the same as the Panel button, for deploy hooks.
+- **Warm up** — after clearing, pre-fill the pages cache (file or Redis) by requesting every published page in every language, with a progress bar in the Panel.
+- **Scriptable** — `cacher()->clear()` and `cacher()->warmup()` do the same as the Panel buttons, for deploy hooks.
 
 ## Installation
 
@@ -75,6 +76,41 @@ return [
 
 Each namespace is cleared through `kirby()->cache($name)->flush()`. A Redis-backed namespace is only cleared when it has a key prefix and Kirby is 5.5 or later.
 
+### Warm up
+
+Warming makes real HTTP requests to the site's own URLs, like an anonymous visitor would: Kirby only stores a page in the pages cache when the request carries no session or cookies, so the authenticated Panel request cannot render the pages itself. The server therefore has to be able to reach its own public URL. On a staging site behind HTTP basic auth every request gets a 401 and nothing is cached.
+
+All options are optional:
+
+```php
+return [
+    'akibeo.cacher' => [
+        'warmup' => [
+            // pages that only exist as routes or virtual pages are not in
+            // site()->index(); return their URLs here (closure or plain array)
+            'urls' => function (Kirby\Cms\App $kirby): array {
+                $urls = [];
+                foreach (['nl' => 'te-koop', 'fr' => 'fr/a-vendre'] as $segment) {
+                    $urls[] = url($segment);
+                }
+                return $urls;
+            },
+            // page ids or fnmatch globs to leave out
+            'exclude' => ['search', 'account/*'],
+            // per-request timeout in seconds
+            'timeout' => 30,
+            // pause between two requests in milliseconds, so the site and
+            // any upstream APIs are not hammered
+            'delay'   => 200,
+            // URLs per request when warming from the Panel
+            'batch'   => 10,
+        ],
+    ],
+];
+```
+
+Pages excluded by Kirby's own `cache.pages.ignore` option (closure or array of ids) are skipped as well. Drafts are never warmed; listed and unlisted pages are.
+
 ## Usage
 
 ### Panel
@@ -83,20 +119,26 @@ Open **Cache Manager** in the Panel menu (admins only; other roles don't see it)
 
 **Clear Cache** removes everything in Kirby's cache root (except `index.html`, `.gitignore`, `.gitkeep` and `.htaccess`) and, when `cache.pages` uses Redis, this site's Redis pages cache.
 
+**Warm Up Cache** requests every published page in every language so the pages cache is filled before the first visitor arrives. The Panel sends the URLs to the server in batches and shows a progress bar, so large sites do not run into `max_execution_time`. The button is disabled when the pages cache is off. Failed requests are listed in the result; the others are still warmed.
+
 ### PHP
 
 ```php
 cacher()->clear();                        // same as the Panel button
 cacher()->clearNamespace('akibeo.pricing');
+cacher()->warmup();                       // every URL from cacher()->warmupUrls()
+cacher()->warmup([$url1, $url2]);         // a subset of those URLs
+cacher()->warmupUrls();                   // the list the warmup uses
 cacher()->stats();
 
 // also available as site methods
 site()->clearCache();
 site()->clearCacheNamespace('akibeo.pricing');
+site()->warmupCache();
 site()->cacheStats();
 ```
 
-Each clear call returns `['success' => bool, 'cleared' => string[], 'errors' => string[]]`.
+Each clear call returns `['success' => bool, 'cleared' => string[], 'errors' => string[]]`; `warmup()` adds `'warmed' => int`. A deploy script typically runs `cacher()->clear()` followed by `cacher()->warmup()`.
 
 ### API
 
@@ -107,6 +149,8 @@ All routes require a logged-in admin; other roles get a permission error.
 | `POST` | `/api/plugin/cacher/clear-cache` | file cache + Redis pages cache |
 | `POST` | `/api/plugin/cacher/clear-namespace/{name}` | one declared namespace |
 | `GET` | `/api/plugin/cacher/stats` | stats as shown in the Panel |
+| `GET` | `/api/plugin/cacher/warmup-urls` | `{ urls: string[], batch: int }` |
+| `POST` | `/api/plugin/cacher/warmup` | JSON body `{ urls: string[] }`; only URLs from `warmup-urls` are requested, anything else is reported as an error and never fetched |
 
 ## Why no FLUSHDB?
 

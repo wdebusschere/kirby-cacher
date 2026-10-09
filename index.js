@@ -28,13 +28,32 @@ panel.plugin('akibeo/cacher', {
             </k-box>
           </div>
 
-          <div style="margin-top: 2rem;">
+          <div style="margin-top: 2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;">
             <k-button icon="trash" theme="negative" variant="filled" :disabled="loading" @click="clearCache">
-              {{ loading ? 'Clearing cache…' : 'Clear Cache' }}
+              {{ clearing ? 'Clearing cache…' : 'Clear Cache' }}
             </k-button>
-            <k-button icon="refresh" variant="filled" :disabled="loading" style="margin-left: 1rem;" @click="refreshStats">
+            <k-button
+              icon="bolt"
+              variant="filled"
+              :disabled="loading || !pagesCacheActive"
+              :title="pagesCacheActive ? 'Request every published page so it is stored in the pages cache' : 'Pages cache is off'"
+              @click="warmup"
+            >
+              {{ progress ? 'Warming up…' : 'Warm Up Cache' }}
+            </k-button>
+            <k-button icon="refresh" variant="filled" :disabled="loading" @click="refreshStats">
               Refresh Stats
             </k-button>
+            <span v-if="!pagesCacheActive" style="color: var(--color-text-dimmed); font-size: var(--text-sm);">
+              Pages cache is off (cache.pages), nothing to warm up
+            </span>
+          </div>
+
+          <div v-if="progress" style="margin-top: 1rem;">
+            <k-progress :value="progressPercent" />
+            <p style="margin-top: 0.5rem; color: var(--color-text-dimmed); font-size: var(--text-sm);">
+              Warming {{ progress.done }} / {{ progress.total }} pages…
+            </p>
           </div>
 
           <template v-if="stats && stats.namespaces && stats.namespaces.length">
@@ -56,7 +75,7 @@ panel.plugin('akibeo/cacher', {
 
           <k-box v-if="result" :theme="result.success ? 'positive' : 'negative'" style="margin-top: 2rem;">
             <k-text>
-              <h3 style="margin-top: 0;">{{ result.success ? 'Cache cleared' : 'Cache clearing failed' }}</h3>
+              <h3 style="margin-top: 0;">{{ result.title || (result.success ? 'Cache cleared' : 'Cache clearing failed') }}</h3>
               <ul v-if="result.cleared && result.cleared.length">
                 <li v-for="item in result.cleared" :key="item">{{ item }}</li>
               </ul>
@@ -70,21 +89,81 @@ panel.plugin('akibeo/cacher', {
       props: {
         cachePath: String,
         redisEnabled: Boolean,
+        pagesCacheActive: Boolean,
         namespaces: Array
       },
       data() {
         return {
           loading: false,
+          clearing: false,
+          progress: null,
           result: null,
           stats: null
         };
+      },
+      computed: {
+        progressPercent() {
+          if (!this.progress || this.progress.total === 0) {
+            return 0;
+          }
+
+          return Math.round((this.progress.done / this.progress.total) * 100);
+        }
       },
       mounted() {
         this.refreshStats();
       },
       methods: {
         async clearCache() {
-          await this.run(() => this.$api.post('plugin/cacher/clear-cache'));
+          this.clearing = true;
+
+          try {
+            await this.run(() => this.$api.post('plugin/cacher/clear-cache'));
+          } finally {
+            this.clearing = false;
+          }
+        },
+        async warmup() {
+          this.loading = true;
+          this.result = null;
+          this.progress = { done: 0, total: 0 };
+
+          try {
+            const { urls, batch } = await this.$api.get('plugin/cacher/warmup-urls');
+            const size = Math.max(1, batch || 10);
+            const errors = [];
+            let warmed = 0;
+
+            this.progress = { done: 0, total: urls.length };
+
+            for (let i = 0; i < urls.length; i += size) {
+              const chunk = urls.slice(i, i + size);
+              const result = await this.$api.post('plugin/cacher/warmup', { urls: chunk });
+
+              warmed += result.warmed || 0;
+              errors.push(...(result.errors || []));
+              this.progress = { done: Math.min(i + size, urls.length), total: urls.length };
+            }
+
+            this.result = {
+              success: errors.length === 0,
+              title: errors.length === 0 ? 'Cache warmed' : 'Cache warmed with errors',
+              cleared: ['Cache warmed (' + warmed + ' of ' + urls.length + ' pages)'],
+              errors: errors
+            };
+
+            await this.refreshStats();
+          } catch (error) {
+            this.result = {
+              success: false,
+              title: 'Cache warming failed',
+              cleared: [],
+              errors: [error.message || 'Request failed']
+            };
+          } finally {
+            this.progress = null;
+            this.loading = false;
+          }
         },
         async clearNamespace(name) {
           await this.run(() => this.$api.post('plugin/cacher/clear-namespace/' + encodeURIComponent(name)));

@@ -6,6 +6,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Warm Up Cache** button in the Panel: requests every published page in
+  every language anonymously so the pages cache (file or Redis) is filled
+  right after a clear. Runs in batches with a progress bar.
+- `cacher()->warmup()`, `cacher()->warmupUrls()` and `site()->warmupCache()`
+  for deploy scripts; `GET /api/plugin/cacher/warmup-urls` and
+  `POST /api/plugin/cacher/warmup` (admin-only, only URLs from the list are
+  ever requested).
+- `akibeo.cacher.warmup` options: `urls` (extra URLs for route-only pages),
+  `exclude` (page ids or globs), `timeout`, `delay` and `batch`.
+
 ### Security
 
 - The API routes and the Panel view are now admin-only. Before, any logged-in
