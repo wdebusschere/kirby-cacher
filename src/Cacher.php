@@ -5,9 +5,12 @@ namespace Akibeo\Cacher;
 use Kirby\Cache\Cache;
 use Kirby\Cache\FileCache;
 use Kirby\Cache\RedisCache;
+use Closure;
 use Kirby\Cms\App;
+use Kirby\Cms\Page;
 use Kirby\Filesystem\Dir;
 use Kirby\Filesystem\F;
+use Kirby\Http\Remote;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use Redis;
@@ -417,6 +420,170 @@ class Cacher
         }
 
         return $redis;
+    }
+
+    /**
+     * Whether the pages cache is switched on (`cache.pages` is `true`
+     * or has `active => true`)
+     */
+    public function pagesCacheActive(): bool
+    {
+        return ($this->kirby->cache('pages')->options()['active'] ?? false) === true;
+    }
+
+    /**
+     * The URLs the warmup requests: every published page in every
+     * language, minus the pages `cache.pages.ignore` and
+     * `akibeo.cacher.warmup.exclude` leave out, plus the URLs of the
+     * `akibeo.cacher.warmup.urls` option. Home comes first.
+     *
+     * Page::isCacheable() is not used on purpose: it inspects the
+     * current request and the warmup API route is a POST, so it would
+     * refuse every page. Only its `ignore` rules are applied here.
+     *
+     * @return string[]
+     */
+    public function warmupUrls(): array
+    {
+        $site      = $this->kirby->site();
+        $languages = $this->kirby->multilang() ? $this->kirby->languages()->codes() : [null];
+        $pages     = $site->index();
+        $urls      = [];
+
+        if ($home = $site->homePage()) {
+            $pages = $pages->prepend($home->id(), $home);
+        }
+
+        $pages = $pages->filter(fn ($page) => $page->isDraft() === false && $this->isWarmable($page));
+
+        foreach ($pages as $page) {
+            foreach ($languages as $code) {
+                $urls[] = $code === null ? $page->url() : $page->url($code);
+            }
+        }
+
+        $extra = $this->kirby->option('akibeo.cacher.warmup.urls');
+
+        if ($extra instanceof Closure) {
+            $extra = $extra($this->kirby);
+        }
+
+        foreach ((array)$extra as $url) {
+            if (is_string($url) === true && $url !== '') {
+                $urls[] = $url;
+            }
+        }
+
+        return array_values(array_unique($urls));
+    }
+
+    /**
+     * Requests pages anonymously so Kirby stores them in the pages
+     * cache. `null` warms every URL from warmupUrls(); a list warms
+     * only those of its URLs that are in warmupUrls(), so the API
+     * cannot be used to make the server request other hosts.
+     *
+     * @return array{success: bool, cleared: string[], errors: string[], warmed: int}
+     */
+    public function warmup(array|null $urls = null): array
+    {
+        if ($this->pagesCacheActive() === false) {
+            return $this->result([], ['The pages cache is not active (cache.pages)']) + ['warmed' => 0];
+        }
+
+        $base = $this->kirby->url();
+
+        if (preg_match('~^https?://~i', $base) !== 1) {
+            return $this->result([], ["The site URL is not absolute ('{$base}'); set the `url` option so the warmup can request the pages"]) + ['warmed' => 0];
+        }
+
+        $allowed = array_flip($this->warmupUrls());
+        $delay   = max(0, (int)$this->kirby->option('akibeo.cacher.warmup.delay', 200));
+        $warmed  = 0;
+        $errors  = [];
+
+        if ($urls === null) {
+            $urls = array_keys($allowed);
+        } else {
+            foreach ($urls as $index => $url) {
+                if (is_string($url) === false) {
+                    $errors[] = "Invalid URL at position {$index}";
+                    unset($urls[$index]);
+                }
+            }
+
+            $urls = array_values(array_unique($urls));
+        }
+
+        foreach ($urls as $url) {
+            if (isset($allowed[$url]) === false) {
+                $errors[] = "{$url}: not in the warmup list";
+                continue;
+            }
+
+            // the pause also applies before the first URL of a batch, so
+            // consecutive batches from the Panel are spaced out as well
+            if ($delay > 0) {
+                usleep($delay * 1000);
+            }
+
+            try {
+                $code = $this->fetch($url);
+
+                if ($code >= 200 && $code < 400) {
+                    $warmed++;
+                } else {
+                    $errors[] = "{$url}: HTTP {$code}";
+                }
+            } catch (Throwable $e) {
+                $errors[] = "{$url}: " . $e->getMessage();
+            }
+        }
+
+        $cleared = $warmed === 1 ? ['1 page warmed'] : ["{$warmed} pages warmed"];
+
+        return $this->result($cleared, $errors) + ['warmed' => $warmed];
+    }
+
+    /**
+     * Whether a page passes the `cache.pages.ignore` rule and the
+     * `akibeo.cacher.warmup.exclude` list (page ids or fnmatch globs)
+     */
+    public function isWarmable(Page $page): bool
+    {
+        $ignore = $this->kirby->cache('pages')->options()['ignore'] ?? null;
+
+        if ($ignore instanceof Closure && $ignore($page) === true) {
+            return false;
+        }
+
+        if (is_array($ignore) === true && in_array($page->id(), $ignore, true) === true) {
+            return false;
+        }
+
+        foreach ((array)$this->kirby->option('akibeo.cacher.warmup.exclude', []) as $pattern) {
+            if (fnmatch((string)$pattern, $page->id()) === true) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Requests a URL without cookies, the way an anonymous visitor
+     * would, and returns the HTTP status code
+     *
+     * @throws \Exception when the request itself fails (DNS, timeout…)
+     */
+    protected function fetch(string $url): int
+    {
+        $response = Remote::get($url, [
+            'timeout' => (int)$this->kirby->option('akibeo.cacher.warmup.timeout', 30),
+            'agent'   => 'Kirby-Cacher/1.0 (cache-warmup)',
+        ]);
+
+        return (int)$response->code();
     }
 
     /**
