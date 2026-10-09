@@ -69,6 +69,20 @@ class WarmupTest extends TestCase
         ], $cacher->warmupUrls());
     }
 
+    public function testWarmupUrlsCanLeaveOutTheHomePage(): void
+    {
+        $excluded = new Cacher($this->kirbyWithPages([
+            'akibeo.cacher' => ['warmup' => ['exclude' => ['home']]],
+        ]));
+        $ignored = new Cacher($this->kirbyWithPages([
+            'cache' => ['pages' => ['active' => true, 'ignore' => fn ($page) => $page->isHomePage()]],
+        ]));
+
+        $this->assertNotContains('https://cacher-test.invalid', $excluded->warmupUrls());
+        $this->assertNotContains('https://cacher-test.invalid', $ignored->warmupUrls());
+        $this->assertContains('https://cacher-test.invalid/about', $ignored->warmupUrls());
+    }
+
     public function testWarmupUrlsHonoursAnIgnoreArray(): void
     {
         $cacher = new Cacher($this->kirbyWithPages([
@@ -169,6 +183,33 @@ class WarmupTest extends TestCase
         $this->assertSame(1, $result['warmed']);
         $this->assertSame(['https://example.com: not in the warmup list'], $result['errors']);
         $this->assertSame(['https://cacher-test.invalid/about'], $cacher->fetched);
+    }
+
+    public function testWarmupReportsUrlsThatAreNotStrings(): void
+    {
+        $cacher = new FakeHttpCacher($this->kirbyWithPages(['akibeo.cacher' => ['warmup' => ['delay' => 0]]]));
+
+        $result = $cacher->warmup([['nested'], 42, 'https://cacher-test.invalid/about']);
+
+        $this->assertFalse($result['success']);
+        $this->assertSame(1, $result['warmed']);
+        $this->assertSame(['Invalid URL at position 0', 'Invalid URL at position 1'], $result['errors']);
+        $this->assertSame(['https://cacher-test.invalid/about'], $cacher->fetched);
+    }
+
+    public function testWarmupNeedsAnAbsoluteSiteUrl(): void
+    {
+        // on the CLI without the `url` option Kirby only knows relative URLs
+        $cacher = new FakeHttpCacher($this->kirbyWithPages()->clone(['options' => ['url' => null]]));
+
+        $this->assertSame('/about', $cacher->warmupUrls()[1]);
+
+        $result = $cacher->warmup();
+
+        $this->assertFalse($result['success']);
+        $this->assertSame(0, $result['warmed']);
+        $this->assertSame(["The site URL is not absolute ('/'); set the `url` option so the warmup can request the pages"], $result['errors']);
+        $this->assertSame([], $cacher->fetched);
     }
 
     public function testWarmupFetchesEveryUrlByDefault(): void

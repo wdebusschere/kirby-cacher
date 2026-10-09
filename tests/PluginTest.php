@@ -81,6 +81,26 @@ class PluginTest extends TestCase
         $this->assertSame(['https://example.com: not in the warmup list'], $result['errors']);
     }
 
+    public function testWarmupRouteRefusesMoreUrlsThanTheBatchSize(): void
+    {
+        $kirby = $this->kirbyAs('admin', [
+            'cache'         => ['pages' => true],
+            'akibeo.cacher' => ['warmup' => ['batch' => 2]],
+        ], [
+            'site'    => ['children' => [['slug' => 'a'], ['slug' => 'b'], ['slug' => 'c']]],
+            'request' => ['method' => 'POST', 'body' => ['urls' => [
+                'https://cacher-test.invalid/a',
+                'https://cacher-test.invalid/b',
+                'https://cacher-test.invalid/c',
+            ]]],
+        ]);
+        $result = $this->routes($kirby)['plugin/cacher/warmup']();
+
+        $this->assertFalse($result['success']);
+        $this->assertSame(0, $result['warmed']);
+        $this->assertSame(['Too many URLs in one request: 3, the batch size is 2'], $result['errors']);
+    }
+
     public function testWarmupRouteWithoutUrlsWarmsNothingWhenTheCacheIsOff(): void
     {
         $kirby  = $this->kirbyAs('admin');

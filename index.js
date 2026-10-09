@@ -138,10 +138,17 @@ panel.plugin('akibeo/cacher', {
 
             for (let i = 0; i < urls.length; i += size) {
               const chunk = urls.slice(i, i + size);
-              const result = await this.$api.post('plugin/cacher/warmup', { urls: chunk });
 
-              warmed += result.warmed || 0;
-              errors.push(...(result.errors || []));
+              // a failed request only loses this batch; the others still run
+              try {
+                const result = await this.$api.post('plugin/cacher/warmup', { urls: chunk });
+
+                warmed += result.warmed || 0;
+                errors.push(...(result.errors || []));
+              } catch (error) {
+                errors.push('Batch ' + chunk[0] + ' … ' + chunk[chunk.length - 1] + ': ' + (error.message || 'Request failed'));
+              }
+
               this.progress = { done: Math.min(i + size, urls.length), total: urls.length };
             }
 

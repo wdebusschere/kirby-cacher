@@ -84,7 +84,20 @@ Kirby::plugin('akibeo/cacher', [
                 'method'  => 'POST',
                 'action'  => function () use ($admin) {
                     $admin();
-                    $urls = kirby()->request()->get('urls');
+                    $urls  = kirby()->request()->get('urls');
+                    $batch = max(1, (int)kirby()->option('akibeo.cacher.warmup.batch', 10));
+
+                    // one request per batch keeps each API call short; a
+                    // PHP script that wants everything calls cacher()->warmup()
+                    if (is_array($urls) === true && count($urls) > $batch) {
+                        return [
+                            'success' => false,
+                            'cleared' => [],
+                            'errors'  => ['Too many URLs in one request: ' . count($urls) . ", the batch size is {$batch}"],
+                            'warmed'  => 0,
+                        ];
+                    }
+
                     return cacher()->warmup(is_array($urls) ? $urls : null);
                 },
             ],

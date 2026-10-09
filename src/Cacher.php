@@ -447,12 +447,14 @@ class Cacher
     {
         $site      = $this->kirby->site();
         $languages = $this->kirby->multilang() ? $this->kirby->languages()->codes() : [null];
-        $pages     = $site->index()->filter(fn ($page) => $page->isDraft() === false && $this->isWarmable($page));
+        $pages     = $site->index();
         $urls      = [];
 
         if ($home = $site->homePage()) {
             $pages = $pages->prepend($home->id(), $home);
         }
+
+        $pages = $pages->filter(fn ($page) => $page->isDraft() === false && $this->isWarmable($page));
 
         foreach ($pages as $page) {
             foreach ($languages as $code) {
@@ -489,19 +491,39 @@ class Cacher
             return $this->result([], ['The pages cache is not active (cache.pages)']) + ['warmed' => 0];
         }
 
-        $allowed = $this->warmupUrls();
-        $urls    = $urls === null ? $allowed : array_values(array_unique(array_map('strval', $urls)));
+        $base = $this->kirby->url();
+
+        if (preg_match('~^https?://~i', $base) !== 1) {
+            return $this->result([], ["The site URL is not absolute ('{$base}'); set the `url` option so the warmup can request the pages"]) + ['warmed' => 0];
+        }
+
+        $allowed = array_flip($this->warmupUrls());
         $delay   = max(0, (int)$this->kirby->option('akibeo.cacher.warmup.delay', 200));
         $warmed  = 0;
         $errors  = [];
 
-        foreach ($urls as $index => $url) {
-            if (in_array($url, $allowed, true) === false) {
+        if ($urls === null) {
+            $urls = array_keys($allowed);
+        } else {
+            foreach ($urls as $index => $url) {
+                if (is_string($url) === false) {
+                    $errors[] = "Invalid URL at position {$index}";
+                    unset($urls[$index]);
+                }
+            }
+
+            $urls = array_values(array_unique($urls));
+        }
+
+        foreach ($urls as $url) {
+            if (isset($allowed[$url]) === false) {
                 $errors[] = "{$url}: not in the warmup list";
                 continue;
             }
 
-            if ($index > 0 && $delay > 0) {
+            // the pause also applies before the first URL of a batch, so
+            // consecutive batches from the Panel are spaced out as well
+            if ($delay > 0) {
                 usleep($delay * 1000);
             }
 
@@ -527,7 +549,7 @@ class Cacher
      * Whether a page passes the `cache.pages.ignore` rule and the
      * `akibeo.cacher.warmup.exclude` list (page ids or fnmatch globs)
      */
-    protected function isWarmable(Page $page): bool
+    public function isWarmable(Page $page): bool
     {
         $ignore = $this->kirby->cache('pages')->options()['ignore'] ?? null;
 

@@ -80,6 +80,11 @@ Each namespace is cleared through `kirby()->cache($name)->flush()`. A Redis-back
 
 Warming makes real HTTP requests to the site's own URLs, like an anonymous visitor would: Kirby only stores a page in the pages cache when the request carries no session or cookies, so the authenticated Panel request cannot render the pages itself. The server therefore has to be able to reach its own public URL. On a staging site behind HTTP basic auth every request gets a 401 and nothing is cached.
 
+Two consequences of that:
+
+- **Set Kirby's `url` option** when you warm from a deploy script or the CLI. Without it Kirby only knows relative URLs there, and `warmup()` refuses with an error that says so.
+- **A single-worker server cannot warm itself from the Panel.** PHP's built-in server (`php -S`, `kirby serve`) handles one request at a time, so the warmup request would wait for itself. Use a script that calls `cacher()->warmup()` instead, or a server with several workers (PHP-FPM, Apache).
+
 All options are optional:
 
 ```php
@@ -150,7 +155,7 @@ All routes require a logged-in admin; other roles get a permission error.
 | `POST` | `/api/plugin/cacher/clear-namespace/{name}` | one declared namespace |
 | `GET` | `/api/plugin/cacher/stats` | stats as shown in the Panel |
 | `GET` | `/api/plugin/cacher/warmup-urls` | `{ urls: string[], batch: int }` |
-| `POST` | `/api/plugin/cacher/warmup` | JSON body `{ urls: string[] }`; only URLs from `warmup-urls` are requested, anything else is reported as an error and never fetched |
+| `POST` | `/api/plugin/cacher/warmup` | JSON body `{ urls: string[] }`, at most `batch` of them per request; only URLs from `warmup-urls` are requested, anything else is reported as an error and never fetched |
 
 ## Why no FLUSHDB?
 
