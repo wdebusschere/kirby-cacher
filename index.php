@@ -34,6 +34,10 @@ Kirby::plugin('akibeo/cacher', [
             'urls'    => null,
             // page ids or fnmatch globs to leave out, e.g. ['search', 'blog/*']
             'exclude' => [],
+            // intended template names or fnmatch globs to leave out; pages
+            // with a `data-*` template hold data for other pages and are
+            // not meant to be visited
+            'excludeTemplates' => ['data-*'],
             // per-request timeout in seconds
             'timeout' => 30,
             // pause between two requests in milliseconds

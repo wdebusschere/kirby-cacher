@@ -16,7 +16,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `POST /api/plugin/cacher/warmup` (admin-only, only URLs from the list are
   ever requested).
 - `akibeo.cacher.warmup` options: `urls` (extra URLs for route-only pages),
-  `exclude` (page ids or globs), `timeout`, `delay` and `batch`.
+  `exclude` (page ids or globs), `excludeTemplates` (template names or globs,
+  `data-*` by default so data-only pages are never requested), `timeout`,
+  `delay` and `batch`.
 
 ### Security
 
