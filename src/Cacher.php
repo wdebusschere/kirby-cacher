@@ -546,8 +546,10 @@ class Cacher
     }
 
     /**
-     * Whether a page passes the `cache.pages.ignore` rule and the
+     * Whether a page passes the `cache.pages.ignore` rule, the
      * `akibeo.cacher.warmup.exclude` list (page ids or fnmatch globs)
+     * and the `akibeo.cacher.warmup.excludeTemplates` list (intended
+     * template names or fnmatch globs, `data-*` by default)
      */
     public function isWarmable(Page $page): bool
     {
@@ -563,6 +565,14 @@ class Cacher
 
         foreach ((array)$this->kirby->option('akibeo.cacher.warmup.exclude', []) as $pattern) {
             if (fnmatch((string)$pattern, $page->id()) === true) {
+                return false;
+            }
+        }
+
+        $template = $page->intendedTemplate()->name();
+
+        foreach ((array)$this->kirby->option('akibeo.cacher.warmup.excludeTemplates', ['data-*']) as $pattern) {
+            if (fnmatch((string)$pattern, $template) === true) {
                 return false;
             }
         }

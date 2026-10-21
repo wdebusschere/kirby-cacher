@@ -102,6 +102,9 @@ return [
             },
             // page ids or fnmatch globs to leave out
             'exclude' => ['search', 'account/*'],
+            // intended template names or fnmatch globs to leave out;
+            // `data-*` pages hold data for other pages and are not visited
+            'excludeTemplates' => ['data-*'],
             // per-request timeout in seconds
             'timeout' => 30,
             // pause between two requests in milliseconds, so the site and
@@ -114,7 +117,7 @@ return [
 ];
 ```
 
-Pages excluded by Kirby's own `cache.pages.ignore` option (closure or array of ids) are skipped as well. Drafts are never warmed; listed and unlisted pages are.
+Pages excluded by Kirby's own `cache.pages.ignore` option (closure or array of ids) are skipped as well, and so are pages whose template matches `excludeTemplates` (`data-*` by default; set it to `[]` to warm them too). Drafts are never warmed; listed and unlisted pages are.
 
 ## Usage
 

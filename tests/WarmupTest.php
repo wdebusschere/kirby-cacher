@@ -29,6 +29,7 @@ class WarmupTest extends TestCase
                     ['slug' => 'ignored', 'num' => 3],
                     ['slug' => 'secret', 'num' => 4],
                     ['slug' => 'draft', 'isDraft' => true],
+                    ['slug' => 'prices', 'num' => 5, 'template' => 'data-prices'],
                 ],
             ],
         ] + $props);
@@ -67,6 +68,26 @@ class WarmupTest extends TestCase
             'https://cacher-test.invalid',
             'https://cacher-test.invalid/hidden',
         ], $cacher->warmupUrls());
+    }
+
+    public function testWarmupUrlsSkipDataTemplatesByDefault(): void
+    {
+        $cacher = new Cacher($this->kirbyWithPages());
+
+        $this->assertNotContains('https://cacher-test.invalid/prices', $cacher->warmupUrls());
+    }
+
+    public function testWarmupUrlsExcludeTemplatesOptionIsConfigurable(): void
+    {
+        $none = new Cacher($this->kirbyWithPages([
+            'akibeo.cacher' => ['warmup' => ['excludeTemplates' => []]],
+        ]));
+        $more = new Cacher($this->kirbyWithPages([
+            'akibeo.cacher' => ['warmup' => ['excludeTemplates' => ['data-*', 'default']]],
+        ]));
+
+        $this->assertContains('https://cacher-test.invalid/prices', $none->warmupUrls());
+        $this->assertSame([], $more->warmupUrls());
     }
 
     public function testWarmupUrlsCanLeaveOutTheHomePage(): void

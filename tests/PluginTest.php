@@ -52,6 +52,7 @@ class PluginTest extends TestCase
 
         $this->assertNull($kirby->option('akibeo.cacher.warmup.urls'));
         $this->assertSame([], $kirby->option('akibeo.cacher.warmup.exclude'));
+        $this->assertSame(['data-*'], $kirby->option('akibeo.cacher.warmup.excludeTemplates'));
         $this->assertSame(30, $kirby->option('akibeo.cacher.warmup.timeout'));
         $this->assertSame(200, $kirby->option('akibeo.cacher.warmup.delay'));
         $this->assertSame(10, $kirby->option('akibeo.cacher.warmup.batch'));
