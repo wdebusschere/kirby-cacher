@@ -22,7 +22,7 @@
     },
     "require-dev": {
         "getkirby/cms": "^5.5",
-        "phpunit/phpunit": "^10.5 || ^11.0"
+        "phpunit/phpunit": "^13.4.5"
     },
     "suggest": {
         "ext-redis": "Needed for the Redis pages cache stats and clearing (phpredis 6 or later)"
